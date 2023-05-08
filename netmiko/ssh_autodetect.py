@@ -307,7 +307,7 @@ SSH_MAPPER_DICT = {
         "dispatch": "_autodetect_std",
     },
     "mikrotik_routeros": {
-        "cmd": "system resource print",
+        "cmd": "/system resource print",
         "search_patterns": [r"MikroTik"],
         "priority": 99,
         "dispatch": "_autodetect_std",
