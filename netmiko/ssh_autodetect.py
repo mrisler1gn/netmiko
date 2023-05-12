@@ -310,7 +310,7 @@ SSH_MAPPER_DICT = {
         "cmd": "/system resource print",
         "search_patterns": [r"MikroTik"],
         "priority": 99,
-        "dispatch": "_autodetect_std",
+        "dispatch": "_autodetect_std_mk",
     },
 }
 
@@ -365,6 +365,7 @@ class SSHDetect(object):
             raise ValueError("The connection device_type must be 'autodetect'")
         # Always set cmd_verify to False for autodetect
         kwargs["global_cmd_verify"] = False
+        self.router = kwargs
         self.connection = ConnectHandler(*args, **kwargs)
 
         # Add additional sleep to let the login complete.
@@ -373,6 +374,7 @@ class SSHDetect(object):
         # Call the _test_channel_read() in base to clear initial data
         output = BaseConnection._test_channel_read(self.connection)
         self.initial_buffer = output
+        
         self.potential_matches: Dict[str, int] = {}
         self._results_cache: Dict[str, str] = {}
 
@@ -552,3 +554,56 @@ class SSHDetect(object):
         except Exception:
             return 0
         return 0
+    def _autodetect_std_mk(
+        self,
+        cmd: str = "",
+        search_patterns: Optional[List[str]] = None,
+        re_flags: int = re.IGNORECASE,
+        priority: int = 99
+    ) -> int:
+        """
+        Method to try to auto-detect MikroTik device type. Due to MikroTik constantly repaints the line,
+        we force to use routeros driver and creates a new connection.
+
+        Parameters
+        ----------
+        cmd : str
+            The command to send to the remote device after checking cache.
+        search_patterns : list
+            A list of regular expression to look for in the command's output (default: None).
+        re_flags: re.flags, optional
+            Any flags from the python re module to modify the regular expression (default: re.I).
+        priority: int, optional
+            The confidence the match is right between 0 and 99 (default: 99).
+        """
+        invalid_responses = [
+            r"% Invalid input detected",
+            r"syntax error, expecting",
+            r"Error: Unrecognized command",
+            r"%Error",
+            r"command not found",
+            r"Syntax Error: unexpected argument",
+            r"% Unrecognized command found at",
+        ]
+        if not cmd or not search_patterns:
+            return 0
+        try:
+            # force to use mikrotik_routeros as device_type.
+            self.router['device_type'] = 'mikrotik_routeros'
+            router_connect = ConnectHandler(**self.router)
+            time.sleep(3)
+            response = router_connect.send_command(cmd)
+            # Look for error conditions in output
+            for pattern in invalid_responses:
+                match = re.search(pattern, response, flags=re.I)
+                if match:
+                    return 0
+            for pattern in search_patterns:
+                match = re.search(pattern, response, flags=re_flags)
+                if match:
+                    return priority
+        except Exception:
+            return 0
+        return 0    
+    
+    
